@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ถ่ายภาพเพื่อวิเคราะห์</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(180deg, rgba(170, 163, 185, 0.7), rgba(118, 115, 115, 0.9)), url('3.jpg');
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-size: cover;
+            background-position: center;
+            margin: 0;
+        }
+
+        .container {
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            max-width: 90%;
+            width: 400px;
+        }
+
+        h1 {
+            font-size: 20px;
+            color: #7c5ba6;
+            margin-bottom: 10px;
+        }
+
+        video, canvas {
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+            display: block;
+            margin: auto;
+        }
+
+        .btn-action {
+            background-color: #f5b62a;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .btn-action:hover {
+            background-color: #f07325;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>ถ่ายภาพเพื่อวิเคราะห์</h1>
+        <video id="video" autoplay muted></video>
+        <canvas id="outputCanvas"></canvas>
+        <button id="captureButton" class="btn-action">ถ่ายภาพ</button>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('video');
+        const canvasElement = document.getElementById('outputCanvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        let faceMesh;
+        let currentLandmarks = null;
+        let camera;
+
+        async function initializeFaceMesh() {
+            faceMesh = new FaceMesh({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+            });
+
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5,
+            });
+
+            faceMesh.onResults(onResults);
+        }
+
+        async function startCamera() {
+            if (camera) await camera.stop();
+            camera = new Camera(videoElement, {
+                onFrame: async () => await faceMesh.send({ image: videoElement }),
+                width: 480,
+                height: 360,
+                facingMode: 'user' // ใช้กล้องหน้าเท่านั้น
+            });
+            await camera.start();
+        }
+
+        function drawRectangle(ctx, x, y, w, h, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+        }
+
+        function onResults(results) {
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                currentLandmarks = results.multiFaceLandmarks[0];
+
+                const leftEye = currentLandmarks[33];
+                const rightEye = currentLandmarks[263];
+
+                if (leftEye && rightEye) {
+                    const eyeBoxWidth = Math.abs(rightEye.x - leftEye.x) * canvasElement.width * 1.4;
+                    const eyeBoxHeight = eyeBoxWidth * 0.4;
+                    const eyeBoxX = leftEye.x * canvasElement.width - eyeBoxWidth * 0.15;
+                    const eyeBoxY = leftEye.y * canvasElement.height - eyeBoxHeight * 0.5;
+
+                    drawRectangle(canvasCtx, eyeBoxX, eyeBoxY, eyeBoxWidth, eyeBoxHeight, 'green');
+                }
+            } else {
+                drawRectangle(canvasCtx, canvasElement.width / 2 - 30, canvasElement.height / 2 - 30, 60, 60, 'red');
+            }
+
+            canvasCtx.restore();
+        }
+
+        document.getElementById('captureButton').addEventListener('click', () => {
+            if (currentLandmarks) {
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+                const imageDataURL = canvasElement.toDataURL('image/png');
+                localStorage.setItem('capturedImage', imageDataURL);
+                window.location.href = "page5.html";
+            } else {
+                alert('ไม่พบใบหน้า! กรุณาลองใหม่');
+            }
+        });
+
+        async function initialize() {
+            await initializeFaceMesh();
+            await startCamera();
+        }
+
+        initialize();
+    </script>
+</body>
+
+</html>
